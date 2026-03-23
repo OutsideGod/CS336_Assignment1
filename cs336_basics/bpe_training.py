@@ -29,13 +29,13 @@ def pretokenizer(i, input_path, boundaries, special_tokens):
             else:
                 counts[c] = 1
     result = {}
-    for str in counts:
+    for string in counts:
         lst = []
-        bytestr = str.encode('utf-8')
+        bytestr = string.encode('utf-8')
         for integer in bytestr:
             lst.append(bytes([integer]))
         tup = tuple(lst)
-        result[tup] = counts[str]
+        result[tup] = counts[string]
     return result
 
 
