@@ -9,6 +9,12 @@ resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'darwin'",
 ]
 
+[manifest]
+members = [
+    "cs336-basics",
+    "data",
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -148,6 +154,11 @@ requires-dist = [
     { name = "ty", specifier = ">=0.0.1a16" },
     { name = "wandb", specifier = ">=0.19.7" },
 ]
+
+[[package]]
+name = "data"
+version = "0.1.0"
+source = { virtual = "data" }
 
 [[package]]
 name = "einops"
