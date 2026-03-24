@@ -17,8 +17,7 @@ class Tokenizer:
     def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
         def convert_vocab(pre):
             nonlocal vocab
-            for key in pre:
-                vocab[int(key)] = pre[key].encode("latin-1")
+            vocab = {int(key): value.encode("latin-1") for key, value in pre.items()}
         def convert_merges(pre):
             nonlocal merges
             for ls in pre:
@@ -51,14 +50,10 @@ class Tokenizer:
                     pre.extend(re.findall(PAT, a))
             result = []
             for string in pre:
-                lst = []
-                bytestr = string.encode('utf-8')
                 if string in self.special_tokens:
-                    result.append(bytestr)
+                    result.append(string.encode('utf-8'))
                 else:
-                    for integer in bytestr:
-                        lst.append(bytes([integer]))
-                    result.append(lst)
+                    result.append([bytes([integer]) for integer in string.encode('utf-8')])
             return result
         def merge():
 
