@@ -24,8 +24,8 @@ def pretokenizer(i, input_path, boundaries, special_tokens):
     #pretokenize
     counts = {}
     for a in seperated_list:
-        iter = re.finditer(PAT, a)
-        for b in iter:
+        it = re.finditer(PAT, a)
+        for b in it:
             c = b.group(0)
             if c in counts:
                 counts[c] += 1
@@ -41,7 +41,7 @@ def pretokenizer(i, input_path, boundaries, special_tokens):
 
 def Train_bpe(input_path, vocab_size, special_tokens):
 
-    def multi(boundaries):
+    def parallel(boundaries):
         result = collections.Counter()
         worker_func = partial(
             pretokenizer,
@@ -215,7 +215,7 @@ def Train_bpe(input_path, vocab_size, special_tokens):
     with open(input_path, "rb") as file:
         boundaries = find_chunk_boundaries(file, threads, b"<|endoftext|>")
     #multiprocessing
-    pre_dict = multi(boundaries)
+    pre_dict = parallel(boundaries)
 
     #merge
     result2 = merge(pre_dict, vocab_size, counter)
