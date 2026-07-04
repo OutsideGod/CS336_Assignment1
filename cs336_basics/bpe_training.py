@@ -1,4 +1,3 @@
-import time
 import collections
 import os
 import regex as re
@@ -66,7 +65,6 @@ def Train_bpe(input_path, vocab_size, special_tokens):
                 return self.pair > other.pair
             def __eq__(self, other):
                 return self.pair == other.pair
-        nonlocal result1
 
         def generate(pair, counter):
             #result1
@@ -75,61 +73,87 @@ def Train_bpe(input_path, vocab_size, special_tokens):
             #result2
             return pair
         def update(pair):
-            nonlocal pair_heap
-            nonlocal pair_counts
-            nonlocal pre_list
-            nonlocal index
-            a = pair[0]
-            b = pair[1]
+            def remove_old(old_pair):
+                if old_pair == pair:
+                    return
+                pair_counts[old_pair] -= magni
+                if pair_counts[old_pair] <= 0:
+                    pair_counts.pop(old_pair, None)
+                    index.pop(old_pair, None)
+                else:
+                    heapq.heappush(pair_heap, (-pair_counts[old_pair], ReverseCompare(old_pair), old_pair))
+
+            def add_new(new_pair):
+                if new_pair in pair_counts:
+                    pair_counts[new_pair] += magni
+                    index[new_pair].add(idx)
+                else:
+                    pair_counts[new_pair] = magni
+                    index[new_pair] = {idx}
+                heapq.heappush(pair_heap, (-pair_counts[new_pair], ReverseCompare(new_pair), new_pair))
+
+            a , b = pair
             merged = a + b
 
             for idx in list(index[pair]):
                 sub_list = pre_list[idx]
                 magni = pre_counts[idx]
-                new_sub_list = []
+                i = 0
                 j = 0
+                pos = []
 
-                for i in range(len(sub_list) - 1):
-                    a = sub_list[i]
-                    b = sub_list[i + 1]
-                    old_pair = (a, b)
-
-                    pair_counts[old_pair] -= magni
-                    index[old_pair].discard(idx)
-
-                    if pair_counts[old_pair] <= 0:
-                        del pair_counts[old_pair]
-                        if old_pair in index:
-                            del index[old_pair]
+                #locating the merged pair's position
+                while i < len(sub_list) - 1:
+                    if sub_list[i] == a and sub_list[i + 1] == b:
+                        pos.append(i)
+                        i += 2
                     else:
-                        heapq.heappush(pair_heap, (-pair_counts[old_pair], ReverseCompare(old_pair),old_pair))
+                        i += 1
+                if not pos:
+                    continue
 
+                #delete the old pairs
+                no_more_old = set()
+                for e in pos:
+                    if e > 0:
+                        if e - 1 not in no_more_old:
+                            no_more_old.add(e - 1)
+                            old_left = (sub_list[e - 1], a)
+                            remove_old(old_left)
+                    if e < len(sub_list) - 2:
+                        if e + 1 not in no_more_old:
+                            no_more_old.add(e + 1)
+                            old_right = (b, sub_list[e + 2])
+                            remove_old(old_right)
+
+                #create merged sublist
+                new_sub_list = []
+                new_pos = []
                 while j < len(sub_list):
-                    f = sub_list[j]
-                    if j + 1 == len(sub_list):
-                        new_sub_list.append(f)
+                    if j < len(sub_list) - 1 and sub_list[j] == a and sub_list[j + 1] == b:
+                        new_pos.append(len(new_sub_list))
+                        new_sub_list.append(merged)
+                        j += 2
                     else:
-                        s = sub_list[j + 1]
-                        if f == pair[0] and s == pair[1]:
-                            new_sub_list.append(merged)
-                            j += 1
-                        else:
-                            new_sub_list.append(f)
-                    j += 1
+                        new_sub_list.append(sub_list[j])
+                        j += 1
 
-                for k in range(len(new_sub_list) - 1):
-                    first = new_sub_list[k]
-                    second = new_sub_list[k + 1]
-                    new_pair = (first, second)
-                    if new_pair in pair_counts:
-                        pair_counts[new_pair] += magni
-                        index[new_pair].add(idx)
-                    else:
-                        pair_counts[new_pair] = magni
-                        index[new_pair] = {idx}
-                    heapq.heappush(pair_heap, (-pair_counts[new_pair], ReverseCompare((first, second)),(first, second)))
+                #add the new pairs
+                no_more_new = set()
+                for e in new_pos:
+                    if e > 0:
+                        if e - 1 not in no_more_new:
+                            no_more_new.add(e - 1)
+                            new_left = (new_sub_list[e - 1], merged)
+                            add_new(new_left)
+                    if e < len(new_sub_list) - 1:
+                        if e not in no_more_new:
+                            no_more_new.add(e)
+                            new_right = (merged, new_sub_list[e + 1])
+                            add_new(new_right)
                 pre_list[idx] = new_sub_list
-
+            pair_counts.pop(pair, None)
+            index.pop(pair, None)
 
 
         pre_list = []
@@ -187,21 +211,13 @@ def Train_bpe(input_path, vocab_size, special_tokens):
 
     #pretokenize
     #finding boundaries
-    time_begin = time.time()
     threads = os.cpu_count() - 1
     with open(input_path, "rb") as file:
         boundaries = find_chunk_boundaries(file, threads, b"<|endoftext|>")
     #multiprocessing
     pre_dict = multi(boundaries)
-    time_end = time.time()
-    time0 = time_end - time_begin
 
     #merge
-    time_begin = time.time()
     result2 = merge(pre_dict, vocab_size, counter)
-    time_end = time.time()
-    time1 = time_end - time_begin
-    print("pre", time0)
-    print("merge", time1)
     #return
     return result1, result2

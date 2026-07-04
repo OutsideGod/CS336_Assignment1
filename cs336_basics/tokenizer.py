@@ -32,6 +32,20 @@ class Tokenizer:
 
 #text: str
     def encode(self, text):
+        def multi(boundaries):
+            result = collections.Counter()
+            worker_func = partial(
+                pretokenizer,
+                input_path=input_path,
+                boundaries=boundaries,
+                special_tokens=special_tokens
+            )
+
+            with Pool(threads) as p:
+                local_result_list = p.map(worker_func, range(len(boundaries) - 1))
+            for local_list in local_result_list:
+                result.update(local_list)
+            return result
         def pre_tokenize(text, i):
             #Obtain Chunk
             chunk = text[boundaries[i]:boundaries[i + 1]]
@@ -60,6 +74,11 @@ class Tokenizer:
         def worker(text):
             merge(pre_tokenize(text))
 
+        threads = os.cpu_count() - 1
+        with open(text, "rb") as file:
+            boundaries = find_chunk_boundaries(file, threads, b"<|endoftext|>")
+        # multiprocessing
+        pre_dict = multi(boundaries)
 
 # iterable: iterable[str]
     def encode_iterable(self, iterable):
