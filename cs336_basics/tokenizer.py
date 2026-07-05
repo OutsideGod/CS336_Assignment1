@@ -1,9 +1,5 @@
 import json
-import collections
-import os
 import regex as re
-from multiprocessing import Pool
-from functools import partial
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 BYTE_TABLE = [bytes([i]) for i in range(256)]
@@ -12,7 +8,7 @@ class Tokenizer:
     def __init__(self, vocab, merges, special_tokens=None):
         self.vocab = vocab
         self.merges = merges
-        self.special_tokens = special_tokens
+        self.special_tokens = special_tokens or []
         self.inverse_vocab = {v: k for k, v in vocab.items()}
         self.inverse_merges = {pair: index for index, pair in enumerate(self.merges)}
         self.cache = {}
@@ -36,42 +32,54 @@ class Tokenizer:
 
 #text: str
     def encode(self, text):
-
         def merge(tup):
+            result = list(tup)
+            while len(result) >= 2:
+                best_pair = min(((result[i], result[i + 1]) for i in range(len(result) - 1)),key=lambda p: self.inverse_merges.get(p, float('inf')))
+                if best_pair not in self.inverse_merges:
+                    break
 
+                new = []
+                merged = best_pair[0] + best_pair[1]
+                length = len(result)
+                it = iter(range(len(result)))
+
+                for i in it:
+                    if i < length - 1 and (result[i], result[i + 1]) == best_pair:
+                        new.append(merged)
+                        next(it, None)
+                    else:
+                        new.append(result[i])
+                result = new
+            return result
 
         # Break at special tokens
-        pat = "(" + "|".join(re.escape(t) for t in self.special_tokens) + ")"
-        seperated_list = re.split(pat, text)
+        if self.special_tokens:
+            sorted_specials = sorted(self.special_tokens, key=len, reverse=True)
+            pat = "(" + "|".join(re.escape(t) for t in sorted_specials) + ")"
+            seperated_list = re.split(pat, text)
+        else:
+            seperated_list = [text]
 
-        # regex
-        pre = []
-        cache = {}
+        # pretokenize + merge
+        result = []
         for long_string in seperated_list:
             if long_string in self.special_tokens:
-                pre.append(self.inverse_vocab[long_string.encode('utf-8')])
+                result.append(self.inverse_vocab[long_string.encode('utf-8')])
             else:
                 it = re.finditer(PAT, long_string)
                 for b in it:
                     c = tuple([BYTE_TABLE[byte] for byte in b.group(0).encode('utf-8')])
-                    pre.append(c)
-                    if c in cache:
-                        pre.append(cache[c])
-                    else:
-                        cache[c] = merge(c)
-            '''result = []
-            for e in pre:
-                if isinstance(e, list):
-                    for string in e:
-                        bytestr = string.encode('utf-8')
-                        result.append([BYTE_TABLE[b] for b in bytestr])
-                else:
-                    result.append(e.encode('utf-8'))
-            return result'''
+                    if c not in self.cache:
+                        self.cache[c] = [self.inverse_vocab[e] for e in merge(c)]
+                    result.extend(self.cache[c])
+        return result
 
 # iterable: iterable[str]
     def encode_iterable(self, iterable):
+        for e in iterable:
+            yield from self.encode(e)
 
 # ids: list[int]
     def decode(self, ids):
-
+        return b"".join(self.vocab[idx] for idx in ids).decode('utf-8', errors='replace')
