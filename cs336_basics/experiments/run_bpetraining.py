@@ -17,14 +17,14 @@ input_path1 = r"/home/ydy11/CS336/Assignment1/data/owt_train.txt"
 output_path1_0 = r"/home/ydy11/CS336/Assignment1/cs336_basics/saves/owt_vocab.json"
 output_path1_1 = r"/home/ydy11/CS336/Assignment1/cs336_basics/saves/owt_merges.json"
 
-#time_begin = time.time()
-#general(input_path0, output_path0_0, output_path0_1, 10000, ["<|endoftext|>"])
-#time_end = time.time()
-#time0 = time_end - time_begin
+time_begin = time.time()
+general(input_path0, output_path0_0, output_path0_1, 10000, ["<|endoftext|>"])
+time_end = time.time()
+time0 = time_end - time_begin
 
 time_begin = time.time()
 general(input_path1, output_path1_0, output_path1_1, 32000, ["<|endoftext|>"])
 time_end = time.time()
 time1 = time_end - time_begin
 
-print("用时", time1)
+print("用时", time0 , " ", time1)

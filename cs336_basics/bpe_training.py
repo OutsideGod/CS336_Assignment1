@@ -11,26 +11,60 @@ from cs336_basics.pretokenization_example import find_chunk_boundaries
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 BYTE_TABLE = [bytes([i]) for i in range(256)]
 
+
 def pretokenizer(i, input_path, boundaries, special_tokens):
-    # obtain chunk
-    with open(input_path, "rb") as file:
-        file.seek(boundaries[i])
-        chunk = file.read(boundaries[i + 1] - boundaries[i]).decode("utf-8")
-
-    #remove special tokens
-    pat = "|".join(re.escape(t) for t in special_tokens)
-    seperated_list = re.split(pat, chunk)
-
-    #pretokenize
     counts = {}
-    for a in seperated_list:
-        it = re.finditer(PAT, a)
-        for b in it:
-            c = b.group(0)
-            if c in counts:
-                counts[c] += 1
-            else:
-                counts[c] = 1
+    pat = "|".join(re.escape(t) for t in special_tokens)
+
+    with open(input_path, "rb") as file:
+        start_pos = boundaries[i]
+        end_pos = boundaries[i + 1]
+        chunk_size = end_pos - start_pos
+
+        if chunk_size < 50 * 1024 * 1024:
+            file.seek(start_pos)
+            chunk = file.read(chunk_size).decode("utf-8", errors="ignore")
+            seperated_list = re.split(pat, chunk)
+            for a in seperated_list:
+                it = re.finditer(PAT, a)
+                for b in it:
+                    c = b.group(0)
+                    counts[c] = counts.get(c, 0) + 1
+        else:
+            file.seek(start_pos)
+            buffer = b""
+            bytes_to_read = chunk_size
+
+            while bytes_to_read > 0:
+                read_size = min(10 * 1024 * 1024, bytes_to_read)
+                chunk_bytes = file.read(read_size)
+                if not chunk_bytes:
+                    break
+                bytes_to_read -= len(chunk_bytes)
+                buffer += chunk_bytes
+
+                parts = buffer.split(b"<|endoftext|>")
+
+                buffer = parts[-1]
+
+                for part in parts[:-1]:
+                    doc = part.decode("utf-8", errors="ignore")
+                    seperated_list = re.split(pat, doc)
+                    for a in seperated_list:
+                        it = re.finditer(PAT, a)
+                        for b in it:
+                            c = b.group(0)
+                            counts[c] = counts.get(c, 0) + 1
+
+            if buffer:
+                doc = buffer.decode("utf-8", errors="ignore")
+                seperated_list = re.split(pat, doc)
+                for a in seperated_list:
+                    it = re.finditer(PAT, a)
+                    for b in it:
+                        c = b.group(0)
+                        counts[c] = counts.get(c, 0) + 1
+
     result = {}
     for string, count in counts.items():
         bytestr = string.encode('utf-8')
@@ -76,26 +110,29 @@ def Train_bpe(input_path, vocab_size, special_tokens):
             def remove_old(old_pair):
                 if old_pair == pair:
                     return
-                pair_counts[old_pair] -= magni
-                if pair_counts[old_pair] <= 0:
-                    pair_counts.pop(old_pair, None)
-                    index.pop(old_pair, None)
-                else:
-                    heapq.heappush(pair_heap, (-pair_counts[old_pair], ReverseCompare(old_pair), old_pair))
+                pair_changes[old_pair] -= magni
+                #pair_counts[old_pair] -= magni
+                #if pair_counts[old_pair] <= 0:
+                    #pair_counts.pop(old_pair, None)
+                    #index.pop(old_pair, None)
+                #else:
+                    #heapq.heappush(pair_heap, (-pair_counts[old_pair], ReverseCompare(old_pair), old_pair))
 
             def add_new(new_pair):
-                if new_pair in pair_counts:
-                    pair_counts[new_pair] += magni
-                    index[new_pair].add(idx)
-                else:
-                    pair_counts[new_pair] = magni
-                    index[new_pair] = {idx}
-                heapq.heappush(pair_heap, (-pair_counts[new_pair], ReverseCompare(new_pair), new_pair))
+                pair_changes[new_pair] += magni
+                index[new_pair].append(idx)
+                #if new_pair in pair_counts:
+                    #pair_counts[new_pair] += magni
+                    #index[new_pair].append(idx)
+                #else:
+                    #pair_counts[new_pair] = magni
+                    #index[new_pair] = [idx]
+                #heapq.heappush(pair_heap, (-pair_counts[new_pair], ReverseCompare(new_pair), new_pair))
 
             a , b = pair
             merged = a + b
-
-            for idx in list(index[pair]):
+            pair_changes = collections.defaultdict(int)
+            for idx in set(index[pair]):
                 sub_list = pre_list[idx]
                 magni = pre_counts[idx]
                 i = 0
@@ -152,6 +189,15 @@ def Train_bpe(input_path, vocab_size, special_tokens):
                             new_right = (merged, new_sub_list[e + 1])
                             add_new(new_right)
                 pre_list[idx] = new_sub_list
+            for p, c in pair_changes.items():
+                if p == pair:
+                    continue
+                pair_counts[p] = pair_counts.get(p, 0) + c
+                if pair_counts[p] <= 0:
+                    pair_counts.pop(p, None)
+                    index.pop(p, None)
+                else:
+                    heapq.heappush(pair_heap, (-pair_counts[p], ReverseCompare(p), p))
             pair_counts.pop(pair, None)
             index.pop(pair, None)
 
@@ -159,7 +205,7 @@ def Train_bpe(input_path, vocab_size, special_tokens):
         pre_list = []
         pre_counts = []
         pair_counts = {}
-        index = {}
+        index = collections.defaultdict(list)
         merge_counter = vocab_size - len(special_tokens) - 256
         result = []
 
@@ -172,10 +218,10 @@ def Train_bpe(input_path, vocab_size, special_tokens):
                 a = (tup[i], tup[i + 1])
                 if a in pair_counts:
                     pair_counts[a] += freq
-                    index[a].add(init_counter)
+                    index[a].append(init_counter)
                 else:
                     pair_counts[a] = freq
-                    index[a] = {init_counter}
+                    index[a] = [init_counter]
             init_counter += 1
         pair_heap =[(-freq, ReverseCompare((a, b)), (a, b)) for (a, b), freq in pair_counts.items()]
         heapq.heapify(pair_heap)

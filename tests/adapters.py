@@ -11,7 +11,7 @@ from torch import Tensor
 
 from cs336_basics.bpe_training import Train_bpe
 from cs336_basics.tokenizer import Tokenizer
-
+from cs336_basics.model import Linear, Embedding
 
 
 def run_linear(
@@ -33,7 +33,15 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
-    raise NotImplementedError
+    result = Linear(d_in, d_out, weights.device, weights.dtype)
+
+    result.load_state_dict(
+        {
+            "W": weights
+        }
+    )
+
+    return result(in_features)
 
 
 def run_embedding(
@@ -55,7 +63,15 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    result = Embedding(vocab_size, d_model, weights.device, weights.dtype)
+
+    result.load_state_dict(
+        {
+            "E": weights
+        }
+    )
+
+    return result.forward(token_ids)
 
 
 def run_swiglu(
@@ -557,7 +573,7 @@ def get_tokenizer(
         merges (list[tuple[bytes, bytes]]): BPE merges. Each list item is a tuple of bytes (<token1>, <token2>),
             representing that <token1> was merged with <token2>.
             Merges are ordered by order of creation.
-        special_tokens (list[str] | None): A list of string special tokens for the tokenizer. These strings will never
+        special_tokens (list[str] | None): A list of string special tokens for the tokenize r. These strings will never
             be split into multiple tokens, and will always be kept as a single token.
 
     Returns:
