@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 from einops import einsum
+from einops import reduce
 
 class Linear(nn.Module):
     def __init__(self, in_features, out_features, device=None, dtype=None):
@@ -26,3 +27,16 @@ class Embedding(nn.Module):
 
     def forward(self, token_ids: torch.Tensor):
         return self.E[token_ids]
+
+class RMSNorm(nn.Module):
+    def __init__(self, d_model, eps = 1e-5, device=None, dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.eps = eps
+        self.G = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
+    def forward(self, x: torch.Tensor):
+        in_dtype = x.dtype
+        x = x.to(torch.float32)
+        base = torch.sqrt(reduce(x ** 2, "batch sequence dmodel -> batch sequence 1", "mean") + self.eps)
+        result = x * self.G / base
+        return result.to(in_dtype)
